@@ -9,6 +9,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <!-- Adicionar Cropper.js CSS e JS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
     <style>
         body {
             font-family: 'Arial', sans-serif;
@@ -99,6 +102,31 @@
             color: #4dabf7; /* Azul DeepSeek para ícones */
         }
 
+        /* Estilos para o contêiner da imagem */
+        #image-preview-container {
+            width: 300px; /* Largura fixa */
+            height: 300px; /* Altura fixa */
+            margin-top: 10px;
+            overflow: hidden; /* Esconde partes da imagem fora do contêiner */
+            position: relative;
+            border: 2px solid #4dabf7; /* Borda azul */
+            border-radius: 8px; /* Cantos arredondados */
+            display: none; /* Inicialmente oculto */
+        }
+
+        #image-preview {
+            display: block;
+            max-width: 100%; /* Garante que a imagem não ultrapasse o contêiner */
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%); /* Centraliza a imagem */
+        }
+
+        .cropper-container {
+            margin-top: 10px;
+        }
+
         /* Ajustes para telas menores */
         @media (max-width: 768px) {
             body {
@@ -126,6 +154,11 @@
                 font-size: 1rem;
                 padding: 10px;
             }
+
+            #image-preview-container {
+                width: 250px; /* Reduz o tamanho do contêiner em telas menores */
+                height: 250px;
+            }
         }
 
         /* Melhor layout para telas muito pequenas */
@@ -149,6 +182,11 @@
                 padding: 10px;
                 font-size: 0.95rem;
             }
+
+            #image-preview-container {
+                width: 200px; /* Contêiner ainda menor em telas muito pequenas */
+                height: 200px;
+            }
         }
     </style>
 </head>
@@ -161,234 +199,414 @@
                 <div class="mb-3">
                     <label for="name"><i class="fas fa-user icon"></i>Nome Completo:</label>
                     <input type="text" class="form-control" id="name" name="name" required>
+                    <div class="invalid-feedback">Por favor, insira seu nome completo.</div>
                 </div>
                 <div class="mb-3">
                     <label for="email"><i class="fas fa-envelope icon"></i>E-mail:</label>
                     <input type="email" class="form-control" id="email" name="email" required>
+                    <div class="invalid-feedback">Por favor, insira um e-mail válido.</div>
                 </div>
                 <div class="mb-3">
                     <label for="phone"><i class="fas fa-phone icon"></i>Telefone:</label>
                     <input type="text" class="form-control" id="phone" name="phone" required>
+                    <div class="invalid-feedback">Por favor, insira um telefone válido (apenas números).</div>
                 </div>
                 <div class="mb-3">
                     <label for="address"><i class="fas fa-map-marker-alt icon"></i>Endereço:</label>
                     <input type="text" class="form-control" id="address" name="address" required>
+                    <div class="invalid-feedback">Por favor, insira seu endereço.</div>
                 </div>
                 <div class="mb-3">
                     <label for="photo"><i class="fas fa-camera icon"></i>Foto de Perfil:</label>
                     <input type="file" class="form-control" id="photo" name="photo" accept="image/*" required>
+                    <div class="invalid-feedback">Por favor, selecione uma imagem válida.</div>
                 </div>
+                <!-- Contêiner para pré-visualização da imagem (inicialmente oculto) -->
+                <div id="image-preview-container">
+                    <img id="image-preview" src="#" alt="Pré-visualização da imagem">
+                </div>
+                <br>
+                <!-- Botão para confirmar o recorte (inicialmente oculto) -->
+                <button type="button" id="confirm-crop" style="display: none;">Confirmar Recorte</button>
+                <br>
                 <div class="mb-3">
                     <label for="profile"><i class="fas fa-id-card icon"></i>Perfil Pessoal:</label>
                     <textarea class="form-control" id="profile" name="profile" rows="3" required></textarea>
+                    <div class="invalid-feedback">Por favor, insira seu perfil pessoal.</div>
                 </div>
                 <div class="mb-3">
                     <label for="skills"><i class="fas fa-tools icon"></i>Habilidades:</label>
                     <textarea class="form-control" id="skills" name="skills" rows="3" required></textarea>
+                    <div class="invalid-feedback">Por favor, insira suas habilidades.</div>
                 </div>
                 <div class="mb-3">
                     <label for="experience"><i class="fas fa-briefcase icon"></i>Experiência Profissional:</label>
                     <textarea class="form-control" id="experience" name="experience" rows="3" required></textarea>
+                    <div class="invalid-feedback">Por favor, insira sua experiência profissional.</div>
                 </div>
                 <div class="mb-3">
                     <label for="education"><i class="fas fa-graduation-cap icon"></i>Educação:</label>
                     <textarea class="form-control" id="education" name="education" rows="3" required></textarea>
+                    <div class="invalid-feedback">Por favor, insira sua formação acadêmica.</div>
                 </div>
                 <button type="button" id="generate-pdf"><i class="fas fa-file-pdf icon"></i>Gerar PDF</button>
             </form>
         </div>
     </div>
-</body>
 
     <script>
-document.getElementById('generate-pdf').addEventListener('click', async () => {
-    const { jsPDF } = window.jspdf;
+        let cropper;
+        let croppedImageBlob;
 
-    // Coleta de dados do formulário
-    const name = document.getElementById('name').value;
-    const email = document.getElementById('email').value;
-    const phone = document.getElementById('phone').value;
-    const address = document.getElementById('address').value;
-    const profile = document.getElementById('profile').value;
-    const skills = document.getElementById('skills').value;
-    const experience = document.getElementById('experience').value;
-    const education = document.getElementById('education').value;
-    const photoInput = document.getElementById('photo');
-
-    const doc = new jsPDF({
-        format: 'a4',
-        unit: 'px',
-    });
-
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 40;
-    const contentWidth = pageWidth - margin * 2;
-    let currentY = 60; // Posição inicial
-
-    const titleFontSize = 20;
-    const sectionTitleFontSize = 14;
-    const contentFontSize = 12;
-
-    // Adicionar fundo azul claro
-    doc.setFillColor(240, 248, 255); // Cor azul bem clarinha (#F0F8FF)
-    doc.rect(0, 0, pageWidth, pageHeight, 'F'); // 'F' para preencher o retângulo
-
-    // Adicionar cabeçalho
-    function addHeader() {
-        doc.setFont("Times", "bold");
-        doc.setFontSize(26);
-        const nameWidth = doc.getTextWidth(name.toUpperCase());
-        const maxNameWidth = pageWidth - 200; // Espaço para a imagem
-        let nameFontSize = 26;
-
-        // Reduzir o tamanho da fonte se o nome for muito longo
-        if (nameWidth > maxNameWidth) {
-            nameFontSize = (maxNameWidth / nameWidth) * 26;
-            doc.setFontSize(nameFontSize);
+        // Função para validar o e-mail
+        function validateEmail(email) {
+            const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return regex.test(email);
         }
 
-        doc.text(name.toUpperCase(), margin, currentY);
-        currentY += 40;
+        // Função para validar o telefone
+        function validatePhone(phone) {
+            const regex = /^\d+$/; // Apenas números
+            return regex.test(phone) && phone.length >= 10; // Mínimo de 10 dígitos
+        }
 
-        doc.setFont("Times", "normal");
-        doc.setFontSize(contentFontSize);
-        doc.text(`Email: ${email}`, margin, currentY);
-        doc.text(`Telefone: ${phone}`, margin, currentY + 15);
-        doc.text(`Endereço: ${address}`, margin, currentY + 30);
-        currentY += 50;
+        // Função para validar a imagem
+        function validateImage(file) {
+            return file && file.type.startsWith('image/');
+        }
 
-        doc.setDrawColor(0);
-        doc.setLineWidth(1);
-        doc.line(margin, currentY, pageWidth - margin, currentY); // linha horizontal
-        currentY += 20;
-    }
+        // Função para exibir mensagens de erro
+        function showError(input, message) {
+            input.classList.add('is-invalid');
+            input.nextElementSibling.textContent = message;
+        }
 
-    // Adicionar foto de perfil com máscara circular e fundo branco
-    if (photoInput.files.length > 0) {
-        const photo = photoInput.files[0];
-        const reader = new FileReader();
+        // Função para remover mensagens de erro
+        function clearError(input) {
+            input.classList.remove('is-invalid');
+            input.nextElementSibling.textContent = '';
+        }
 
-        reader.onload = function (e) {
-            const img = new Image();
-            img.src = e.target.result;
+        // Validar todos os campos antes de gerar o PDF
+        function validateForm() {
+            let isValid = true;
 
-            img.onload = function () {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                const size = 70; // Tamanho da imagem no PDF
-                canvas.width = size;
-                canvas.height = size;
+            // Validar nome
+            const name = document.getElementById('name');
+            if (!name.value.trim()) {
+                showError(name, 'Por favor, insira seu nome completo.');
+                isValid = false;
+            } else {
+                clearError(name);
+            }
 
-                // Desenhar fundo branco
+            // Validar e-mail
+            const email = document.getElementById('email');
+            if (!email.value.trim() || !validateEmail(email.value)) {
+                showError(email, 'Por favor, insira um e-mail válido.');
+                isValid = false;
+            } else {
+                clearError(email);
+            }
+
+            // Validar telefone
+            const phone = document.getElementById('phone');
+            if (!phone.value.trim() || !validatePhone(phone.value)) {
+                showError(phone, 'Por favor, insira um telefone válido (apenas números).');
+                isValid = false;
+            } else {
+                clearError(phone);
+            }
+
+            // Validar endereço
+            const address = document.getElementById('address');
+            if (!address.value.trim()) {
+                showError(address, 'Por favor, insira seu endereço.');
+                isValid = false;
+            } else {
+                clearError(address);
+            }
+
+            // Validar foto de perfil
+            const photo = document.getElementById('photo');
+            if (!photo.files[0] || !validateImage(photo.files[0])) {
+                showError(photo, 'Por favor, selecione uma imagem válida.');
+                isValid = false;
+            } else {
+                clearError(photo);
+            }
+
+            // Validar perfil pessoal
+            const profile = document.getElementById('profile');
+            if (!profile.value.trim()) {
+                showError(profile, 'Por favor, insira seu perfil pessoal.');
+                isValid = false;
+            } else {
+                clearError(profile);
+            }
+
+            // Validar habilidades
+            const skills = document.getElementById('skills');
+            if (!skills.value.trim()) {
+                showError(skills, 'Por favor, insira suas habilidades.');
+                isValid = false;
+            } else {
+                clearError(skills);
+            }
+
+            // Validar experiência profissional
+            const experience = document.getElementById('experience');
+            if (!experience.value.trim()) {
+                showError(experience, 'Por favor, insira sua experiência profissional.');
+                isValid = false;
+            } else {
+                clearError(experience);
+            }
+
+            // Validar educação
+            const education = document.getElementById('education');
+            if (!education.value.trim()) {
+                showError(education, 'Por favor, insira sua formação acadêmica.');
+                isValid = false;
+            } else {
+                clearError(education);
+            }
+
+            return isValid;
+        }
+
+        // Inicializar o Cropper.js quando uma imagem for carregada
+        document.getElementById('photo').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file && validateImage(file)) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const imagePreview = document.getElementById('image-preview');
+                    imagePreview.src = e.target.result;
+                    imagePreview.style.display = 'block';
+
+                    // Exibir o contêiner de pré-visualização
+                    document.getElementById('image-preview-container').style.display = 'block';
+
+                    // Destruir o Cropper anterior, se existir
+                    if (cropper) {
+                        cropper.destroy();
+                    }
+
+                    // Inicializar o Cropper.js
+                    cropper = new Cropper(imagePreview, {
+                        aspectRatio: 1, // Proporção 1:1 (quadrado)
+                        viewMode: 1,
+                        autoCropArea: 1,
+                        responsive: true,
+                        guides: true,
+                        preview: '.cropper-preview',
+                    });
+
+                    // Mostrar o botão de confirmar recorte
+                    document.getElementById('confirm-crop').style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                showError(document.getElementById('photo'), 'Por favor, selecione uma imagem válida.');
+            }
+        });
+
+        // Confirmar o recorte e obter a imagem recortada
+        document.getElementById('confirm-crop').addEventListener('click', function () {
+            if (cropper) {
+                const canvas = cropper.getCroppedCanvas({
+                    width: 200, // Largura desejada para a imagem recortada
+                    height: 200, // Altura desejada para a imagem recortada
+                });
+
+                // Criar um canvas para aplicar o corte circular
+                const circularCanvas = document.createElement('canvas');
+                circularCanvas.width = canvas.width;
+                circularCanvas.height = canvas.height;
+                const ctx = circularCanvas.getContext('2d');
+
+                // Preencher o fundo com a cor azul clara (#F0F8FF)
                 ctx.fillStyle = 'rgb(240, 248, 255)';
-                ctx.fillRect(0, 0, size, size);
+                ctx.fillRect(0, 0, circularCanvas.width, circularCanvas.height);
 
-                // Desenhar a imagem em um círculo
+                // Desenhar a imagem recortada em um círculo
                 ctx.beginPath();
-                ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2, true);
+                ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, Math.PI * 2, true);
                 ctx.closePath();
                 ctx.clip();
-                ctx.drawImage(img, 0, 0, size, size);
+                ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
 
-                const roundedImage = canvas.toDataURL('image/jpeg');
-                doc.addImage(roundedImage, "JPEG", pageWidth - 120, 20, size, size);
-                addContent();
-            };
-
-            img.onerror = function () {
-                console.error("Erro ao carregar a imagem.");
-                addContent();
-            };
-        };
-
-        reader.onerror = function () {
-            console.error("Erro ao ler o arquivo.");
-            addContent();
-        };
-
-        reader.readAsDataURL(photo);
-    } else {
-        addContent();
-    }
-
-    // Função para adicionar conteúdo principal
-    function addContent() {
-        // Perfil Pessoal
-        if (profile) {
-            doc.setFont("Times", "bold");
-            doc.setFontSize(sectionTitleFontSize);
-            doc.text("PERFIL PESSOAL", margin, currentY);
-            currentY += 20;
-
-            doc.setFont("Times", "normal");
-            doc.setFontSize(contentFontSize);
-            doc.text(profile, margin, currentY, { maxWidth: contentWidth, lineHeightFactor: 1.5 });
-            currentY += 60;
-
-            addLine();
-        }
-
-        // Formação
-        doc.setFont("Times", "bold");
-        doc.setFontSize(sectionTitleFontSize);
-        doc.text("FORMAÇÃO", margin, currentY);
-        currentY += 20;
-
-        doc.setFont("Times", "normal");
-        const educations = education.split("\n");
-        educations.forEach((edu) => {
-            doc.text(edu, margin, currentY, { maxWidth: contentWidth });
-            currentY += 20;
+                // Converter o canvas circular para um Blob
+                circularCanvas.toBlob(function (blob) {
+                    croppedImageBlob = blob;
+                    alert('Recorte confirmado! Agora você pode gerar o PDF.');
+                }, 'image/jpeg', 0.9); // Qualidade da imagem (0.9 = 90%)
+            }
         });
 
-        addLine();
+        // Gerar PDF com a imagem recortada
+        document.getElementById('generate-pdf').addEventListener('click', async () => {
+            if (!validateForm()) {
+                return; // Impede a geração do PDF se houver erros
+            }
 
-        // Experiência Profissional
-        doc.setFont("Times", "bold");
-        doc.setFontSize(sectionTitleFontSize);
-        doc.text("EXPERIÊNCIA PROFISSIONAL", margin, currentY);
-        currentY += 20;
+            const { jsPDF } = window.jspdf;
 
-        doc.setFont("Times", "normal");
-        const experiences = experience.split("\n");
-        experiences.forEach((exp) => {
-            doc.text(exp, margin, currentY, { maxWidth: contentWidth });
-            currentY += 20;
+            // Coleta de dados do formulário
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const phone = document.getElementById('phone').value;
+            const address = document.getElementById('address').value;
+            const profile = document.getElementById('profile').value;
+            const skills = document.getElementById('skills').value;
+            const experience = document.getElementById('experience').value;
+            const education = document.getElementById('education').value;
+
+            const doc = new jsPDF({
+                format: 'a4',
+                unit: 'px',
+            });
+
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+            const margin = 40;
+            const contentWidth = pageWidth - margin * 2;
+            let currentY = 60; // Posição inicial
+
+            const titleFontSize = 20;
+            const sectionTitleFontSize = 14;
+            const contentFontSize = 12;
+
+            // Adicionar fundo azul claro
+            doc.setFillColor(240, 248, 255); // Cor azul bem clarinha (#F0F8FF)
+            doc.rect(0, 0, pageWidth, pageHeight, 'F'); // 'F' para preencher o retângulo
+
+            // Adicionar cabeçalho
+            function addHeader() {
+                doc.setFont("Times", "bold");
+                doc.setFontSize(26);
+                const nameWidth = doc.getTextWidth(name.toUpperCase());
+                const maxNameWidth = pageWidth - 200; // Espaço para a imagem
+                let nameFontSize = 26;
+
+                // Reduzir o tamanho da fonte se o nome for muito longo
+                if (nameWidth > maxNameWidth) {
+                    nameFontSize = (maxNameWidth / nameWidth) * 26;
+                    doc.setFontSize(nameFontSize);
+                }
+
+                doc.text(name.toUpperCase(), margin, currentY);
+                currentY += 40;
+
+                doc.setFont("Times", "normal");
+                doc.setFontSize(contentFontSize);
+                doc.text(`Email: ${email}`, margin, currentY);
+                doc.text(`Telefone: ${phone}`, margin, currentY + 15);
+                doc.text(`Endereço: ${address}`, margin, currentY + 30);
+                currentY += 50;
+
+                doc.setDrawColor(0);
+                doc.setLineWidth(1);
+                doc.line(margin, currentY, pageWidth - margin, currentY); // linha horizontal
+                currentY += 20;
+            }
+
+            // Adicionar a imagem recortada ao PDF
+            if (croppedImageBlob) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const img = new Image();
+                    img.src = e.target.result;
+
+                    img.onload = function () {
+                        const size = 70; // Tamanho da imagem no PDF
+                        doc.addImage(img, "JPEG", pageWidth - 120, 20, size, size);
+                        addContent(); // Continuar com o restante do PDF
+                    };
+                };
+                reader.readAsDataURL(croppedImageBlob);
+            } else {
+                addContent(); // Continuar sem imagem
+            }
+
+            // Função para adicionar conteúdo principal
+            function addContent() {
+                // Perfil Pessoal
+                if (profile) {
+                    doc.setFont("Times", "bold");
+                    doc.setFontSize(sectionTitleFontSize);
+                    doc.text("PERFIL PESSOAL", margin, currentY);
+                    currentY += 20;
+
+                    doc.setFont("Times", "normal");
+                    doc.setFontSize(contentFontSize);
+                    doc.text(profile, margin, currentY, { maxWidth: contentWidth, lineHeightFactor: 1.5 });
+                    currentY += 60;
+
+                    addLine();
+                }
+
+                // Formação
+                doc.setFont("Times", "bold");
+                doc.setFontSize(sectionTitleFontSize);
+                doc.text("FORMAÇÃO", margin, currentY);
+                currentY += 20;
+
+                doc.setFont("Times", "normal");
+                const educations = education.split("\n");
+                educations.forEach((edu) => {
+                    doc.text(edu, margin, currentY, { maxWidth: contentWidth });
+                    currentY += 20;
+                });
+
+                addLine();
+
+                // Experiência Profissional
+                doc.setFont("Times", "bold");
+                doc.setFontSize(sectionTitleFontSize);
+                doc.text("EXPERIÊNCIA PROFISSIONAL", margin, currentY);
+                currentY += 20;
+
+                doc.setFont("Times", "normal");
+                const experiences = experience.split("\n");
+                experiences.forEach((exp) => {
+                    doc.text(exp, margin, currentY, { maxWidth: contentWidth });
+                    currentY += 20;
+                });
+
+                addLine();
+
+                // Habilidades
+                doc.setFont("Times", "bold");
+                doc.setFontSize(sectionTitleFontSize);
+                doc.text("HABILIDADES", margin, currentY);
+                currentY += 20;
+
+                doc.setFont("Times", "normal");
+                const skillsList = skills.split("\n");
+                skillsList.forEach((skill) => {
+                    doc.text(`- ${skill}`, margin, currentY, { maxWidth: contentWidth });
+                    currentY += 20;
+                });
+
+                addLine();
+
+                // Salvar PDF
+                doc.save(`${name}_curriculo.pdf`);
+            }
+
+            // Função para adicionar linha divisória
+            function addLine() {
+                currentY += 10;
+                doc.setDrawColor(200, 200, 200);
+                doc.setLineWidth(0.5);
+                doc.line(margin, currentY, pageWidth - margin, currentY);
+                currentY += 20;
+            }
+
+            addHeader(); // Iniciar a criação do PDF com o cabeçalho
         });
-
-        addLine();
-
-        // Habilidades
-        doc.setFont("Times", "bold");
-        doc.setFontSize(sectionTitleFontSize);
-        doc.text("HABILIDADES", margin, currentY);
-        currentY += 20;
-
-        doc.setFont("Times", "normal");
-        const skillsList = skills.split("\n");
-        skillsList.forEach((skill) => {
-            doc.text(`- ${skill}`, margin, currentY, { maxWidth: contentWidth });
-            currentY += 20;
-        });
-
-        addLine();
-
-        // Salvar PDF
-        doc.save(`${name}_curriculo.pdf`);
-    }
-
-    // Função para adicionar linha divisória
-    function addLine() {
-        currentY += 10;
-        doc.setDrawColor(200, 200, 200);
-        doc.setLineWidth(0.5);
-        doc.line(margin, currentY, pageWidth - margin, currentY);
-        currentY += 20;
-    }
-
-    addHeader(); // Iniciar a criação do PDF com o cabeçalho
-});
     </script>
 </body>
 
